@@ -1354,18 +1354,16 @@ int f() {
     '''
     create_file('lib.c', lib)
 
-    create_file('main.js', '''
-      var Module = {
-        onRuntimeInitialized: function() {
-          _libf1();
-          _libf2();
-        }
+    create_file('pre.js', '''
+      Module.onRuntimeInitialized = () => {
+        _libf1();
+        _libf2();
       };
     ''')
 
     # Explicitly test with -Oz to ensure libc_optz is included alongside
     # libc when `--whole-archive` is used.
-    self.emcc('lib.c', ['-Oz', '-sEXPORT_ALL', '-sLINKABLE', '--pre-js', 'main.js'], output_filename='a.out.js')
+    self.emcc('lib.c', ['-Oz', '-sEXPORT_ALL', '-sLINKABLE', '--pre-js', 'pre.js'], output_filename='a.out.js')
     self.assertContained('libf1\nlibf2\n', self.run_js('a.out.js'))
 
   def test_export_keepalive(self):
@@ -1463,21 +1461,19 @@ int f() {
       void libfunc2() { puts("libfunc2\n"); }
     '''
     create_file('lib.c', lib)
-    create_file('main.js', '''
-      var Module = {
-        onRuntimeInitialized: function() {
-          _libfunc();
-          _libfunc2();
-        }
+    create_file('pre.js', '''
+      Module.onRuntimeInitialized = () => {
+        _libfunc();
+        _libfunc2();
       };
     ''')
 
     # libfunc2 should not be linked by default, even with EXPORT_ALL
-    self.emcc('lib.c', ['-sEXPORT_ALL', '--pre-js', 'main.js'], output_filename='a.out.js')
+    self.emcc('lib.c', ['-sEXPORT_ALL', '--pre-js', 'pre.js'], output_filename='a.out.js')
     err = self.run_js('a.out.js', assert_returncode=NON_ZERO)
     self.assertContained('_libfunc2 is not defined', err)
 
-    self.emcc('lib.c', ['-sEXPORTED_FUNCTIONS=_libfunc2', '-sEXPORT_ALL', '--pre-js', 'main.js'], output_filename='a.out.js')
+    self.emcc('lib.c', ['-sEXPORTED_FUNCTIONS=_libfunc2', '-sEXPORT_ALL', '--pre-js', 'pre.js'], output_filename='a.out.js')
     self.assertContained('libfunc\n', self.run_js('a.out.js'))
 
   @crossplatform
@@ -2092,7 +2088,7 @@ int f() {
 
     # Now with NO_AUTOLOAD_DYLIBS, but with manual loading of libside.wasm using loadDynamicLibrary
     create_file('pre.js', '''
-    Module.preRun = function() { loadDynamicLibrary('libside.wasm'); }
+    Module.preRun = () => loadDynamicLibrary('libside.wasm');
     ''')
     self.run_process([EMCC, '-sMAIN_MODULE=2', 'main.c', 'libside.wasm', '-sNO_AUTOLOAD_DYLIBS', '--pre-js=pre.js'])
     output = self.run_js('a.out.js')
@@ -2387,8 +2383,8 @@ int f() {
       ''')
     create_file('pre.js', '''
       var Module = {
-        preRun: function() { out('pre-run') },
-        postRun: function() { out('post-run') }
+        preRun: () => out('pre-run'),
+        postRun: () => out('post-run')
       };
       ''')
 
@@ -2398,7 +2394,7 @@ int f() {
     # addRunDependency during preRun should prevent main, and post-run from
     # running.
     with open('pre.js', 'a') as f:
-      f.write('Module.preRun = function() { out("add-dep"); addRunDependency(); }\n')
+      f.write('Module.preRun = () => { out("add-dep"); addRunDependency(); }\n')
     self.run_process([EMCC, 'main.c', '--pre-js', 'pre.js', '-sWASM_ASYNC_COMPILATION=0'])
     output = self.run_js('a.out.js')
     self.assertContained('add-dep\n', output)
@@ -2412,7 +2408,7 @@ int f() {
       if no_initial_run:
         args += ['-sINVOKE_RUN=0']
       if run_dep:
-        create_file('pre.js', 'Module.preRun = function() { addRunDependency("test"); }')
+        create_file('pre.js', 'Module.preRun = () => addRunDependency("test");')
         create_file('post.js', 'removeRunDependency("test");')
         args += ['--pre-js', 'pre.js', '--post-js', 'post.js']
 
@@ -2431,9 +2427,9 @@ int f() {
     # Use postInit
     create_file('pre.js', '''
       var Module = {
-        preRun: function() { out('pre-run') },
-        postRun: function() { out('post-run') },
-        preInit: function() { out('pre-init') }
+        preRun: () => out('pre-run'),
+        postRun: () => out('post-run'),
+        preInit: () => out('pre-init')
       };
     ''')
     self.do_runf('main.c',
@@ -2448,14 +2444,8 @@ int f() {
         return 0;
       }
     ''')
-    create_file('pre.js', '''
-      var Module = {
-        preRun: function() { out('pre-run') },
-      };
-    ''')
-    create_file('pre2.js', '''
-      Module.postRun = function() { out('post-run') };
-    ''')
+    create_file('pre.js', 'Module.preRun = () => out("pre-run");')
+    create_file('pre2.js', 'Module.postRun = () => out("post-run");')
     self.do_runf('main.c', 'pre-run\nhello from main\npost-run\n',
                  emcc_args=['--pre-js', 'pre.js', '--pre-js', 'pre2.js'])
 
@@ -2468,12 +2458,10 @@ int f() {
       }
     ''')
     create_file('pre.js', '''
-      var Module = {
-        preRun: [function() { out('pre-run') }],
-      };
+      Module.preRun = [() => out('pre-run')];
     ''')
     create_file('pre2.js', '''
-      Module.preRun.push(function() { out('prepre') });
+      Module.preRun.push(() => out('prepre'));
     ''')
     self.do_runf('main.c', 'prepre\npre-run\nhello from main\n',
                  emcc_args=['--pre-js', 'pre.js', '--pre-js', 'pre2.js'])
@@ -2735,7 +2723,7 @@ int f() {
 
   def test_embind_asyncify(self):
     create_file('post.js', '''
-      addOnPostRun(function() {
+      addOnPostRun(() => {
         Module.sleep(10);
         out('done');
       });
@@ -2764,7 +2752,7 @@ int f() {
 
   def test_embind_no_function(self):
     create_file('post.js', '''
-      Module['onRuntimeInitialized'] = function() {
+      Module.onRuntimeInitialized = () => {
         out((new Module['MyClass'](42)).x);
       };
     ''')
@@ -2791,7 +2779,7 @@ int f() {
 
   def test_embind_closure_no_dynamic_execution(self):
     create_file('post.js', '''
-      Module['onRuntimeInitialized'] = function() {
+      Module['onRuntimeInitialized'] = () => {
         out(Module['foo'](10));
         out(Module['bar']());
       };
@@ -3314,7 +3302,7 @@ void wakaw::Cm::RasterBase<wakaw::watwat::Polocator>::merbine1<wakaw::Cm::Raster
       Module.onRuntimeInitialized = () => {
         Module.setErrNo(88);
         console.log('done');
-      }
+      };
     ''')
     self.do_runf(test_file('hello_world.c'), 'done', emcc_args=['--pre-js=pre.js', '-sEXPORTED_RUNTIME_METHODS=setErrNo'])
 
@@ -3731,19 +3719,15 @@ EMSCRIPTEN_KEEPALIVE int myreadSeekEnd() {
       }
     ''')
     create_file('duplicated_func_1.js', '''
-      mergeInto(LibraryManager.library, {
-        duplicatedFunc : function() {
-            return 1;
-          }
-        }, { noOverride: true }
+      mergeInto(LibraryManager.library,
+        { duplicatedFunc: () => 1 },
+        { noOverride: true }
       );
     ''')
     create_file('duplicated_func_2.js', '''
-      mergeInto(LibraryManager.library, {
-        duplicatedFunc : function() {
-            return 2;
-          }
-        }, { noOverride: true }
+      mergeInto(LibraryManager.library,
+        { duplicatedFunc: () => 2 },
+        { noOverride: true }
       );
     ''')
 
@@ -3766,11 +3750,9 @@ EMSCRIPTEN_KEEPALIVE int myreadSeekEnd() {
       }
     ''')
     create_file('some_func.js', '''
-      mergeInto(LibraryManager.library, {
-        someFunc : function() {
-            return 1;
-          }
-        }, { checkSig: true }
+      mergeInto(LibraryManager.library,
+        { someFunc: () => 1 },
+        { checkSig: true }
       );
     ''')
 
@@ -3786,7 +3768,7 @@ mergeInto(LibraryManager.library, {
     'white space' : 1
   },
   foo__deps: ['__internal_data'],
-  foo: function() {
+  foo: () => {
     return 0;
   }
 });
@@ -3797,7 +3779,7 @@ mergeInto(LibraryManager.library, {
   def test_js_lib_exported(self):
     create_file('lib.js', r'''
 mergeInto(LibraryManager.library, {
- jslibfunc: function(x) { return 2 * x }
+ jslibfunc: (x) => 2 * x
 });
 ''')
     create_file('src.c', r'''
@@ -3818,13 +3800,11 @@ int main() {
     create_file('lib.js', r'''
 mergeInto(LibraryManager.library, {
   jslibfunc__deps: ['asmlibfunc'],
-  jslibfunc: function(x) {
-    return 2 * _asmlibfunc(x);
-  },
+  jslibfunc: (x) => 2 * _asmlibfunc(x),
 
   asmlibfunc__asm: true,
   asmlibfunc__sig: 'ii',
-  asmlibfunc: function(x) {
+  asmlibfunc: (x) => {
     x = x | 0;
     return x + 1 | 0;
   }
@@ -3843,7 +3823,7 @@ int main() {
     create_file('lib.js', r'''
 mergeInto(LibraryManager.library, {
   jslibfunc__deps: ['$callRuntimeCallbacks'],
-  jslibfunc: function(x) {
+  jslibfunc: (x) => {
     callRuntimeCallbacks();
   },
 });
@@ -3862,12 +3842,12 @@ int main() {
     create_file('lib.js', r'''
 mergeInto(LibraryManager.library, {
   jslibfunc__sig: 'ii',
-  jslibfunc: function(x) {},
+  jslibfunc: (x) => {},
 });
 
 mergeInto(LibraryManager.library, {
   jslibfunc__sig: 'ii',
-  jslibfunc: function(x) {},
+  jslibfunc: (x) => {},
 });
 ''')
     create_file('src.c', r'''
@@ -3884,7 +3864,7 @@ int main() {
     create_file('lib2.js', r'''
 mergeInto(LibraryManager.library, {
   jslibfunc__sig: 'pp',
-  jslibfunc: function(x) {},
+  jslibfunc: (x) => {},
 });
 ''')
     err = self.expect_fail([EMCC, 'src.c', '--js-library', 'lib.js', '--js-library', 'lib2.js'])
@@ -3894,7 +3874,7 @@ mergeInto(LibraryManager.library, {
     create_file('lib.js', r'''
 mergeInto(LibraryManager.library, {
   jslibfunc__deps: 'hello',
-  jslibfunc: function(x) {},
+  jslibfunc: (x) => {},
 });
 ''')
     create_file('src.c', r'''
@@ -3973,7 +3953,7 @@ int main(void) {
 ''')
 
     create_file('pre.js', r'''
-var Module = { print: function(x) { throw '<{(' + x + ')}>' } };
+Module.print = (x) => { throw '<{(' + x + ')}>' };
 ''')
 
     self.run_process([EMCC, 'code.c', '--pre-js', 'pre.js'])
@@ -4049,7 +4029,7 @@ int main() {
     def add_on_abort_and_verify(extra=''):
       js = read_file('a.out.js')
       with open('a.out.js', 'w') as f:
-        f.write("var Module = { onAbort: function() { console.log('%s') } };\n" % expected_output)
+        f.write("var Module = { onAbort: () => console.log('%s') };\n" % expected_output)
         f.write(extra + '\n')
         f.write(js)
       self.assertContained(expected_output, self.run_js('a.out.js', assert_returncode=NON_ZERO))
@@ -4096,7 +4076,7 @@ int main() {
     self.run_process([EMCC, 'src.c', '-sWASM_ASYNC_COMPILATION=0'])
     js = read_file('a.out.js')
     with open('a.out.js', 'w') as f:
-      f.write("var Module = { onAbort: function() { console.log('%s'); throw 're-throw'; } };\n" % expected_output)
+      f.write("var Module = { onAbort: () => { console.log('%s'); throw 're-throw'; } };\n" % expected_output)
       f.write(js)
     out = self.run_js('a.out.js', assert_returncode=NON_ZERO)
     print(out)
@@ -5549,7 +5529,7 @@ EMSCRIPTEN_KEEPALIVE void callback() {
 }
 
 int main() {
-  EM_ASM({ setTimeout(function() { out("calling callback()"); _callback() }, 100) });
+  EM_ASM({ setTimeout(() => { out("calling callback()"); _callback() }, 100) });
   emscripten_exit_with_live_runtime();
   return 123;
 }
@@ -5605,10 +5585,7 @@ int main(int argc, char **argv) {
     # try to add a main() from JS, at runtime. this is not supported (the
     # compiler needs to know at compile time about main).
     create_file('pre_main.js', r'''
-      var Module = {
-        '_main': function() {
-        }
-      };
+      Module['_main'] = () => {};
     ''')
     create_file('src.cpp', '')
     self.emcc_args += ['--pre-js', 'pre_main.js']
@@ -5963,16 +5940,16 @@ int main(void) {
     self.run_process([EMCC, test_file('hello_world.c'), '-sMODULARIZE', '-sASSERTIONS=0'])
     src = 'var module = 0; ' + read_file('a.out.js')
     create_file('a.out.js', src)
-    self.assertContained("define([], function() { return Module; });", src)
+    self.assertContained("define([], () => Module);", src)
 
-    create_file('run_module.js', 'var m; (global.define = function(deps, factory) { m = factory(); }).amd = true; require("./a.out.js"); m();')
+    create_file('run_module.js', 'var m; (global.define = (deps, factory) => { m = factory(); }).amd = true; require("./a.out.js"); m();')
     output = self.run_js('run_module.js')
     self.assertContained('hello, world!\n', output)
 
     self.run_process([EMCC, test_file('hello_world.c'), '-sMODULARIZE', '-sEXPORT_NAME="NotModule"', '-sASSERTIONS=0'])
     src = 'var module = 0; ' + read_file('a.out.js')
     create_file('a.out.js', src)
-    self.assertContained("define([], function() { return NotModule; });", src)
+    self.assertContained("define([], () => NotModule);", src)
 
     output = self.run_js('run_module.js')
     self.assertContained('hello, world!\n', output)
@@ -6092,7 +6069,7 @@ print(os.environ.get('NM'))
 #include <emscripten.h>
 int main() {
   EM_ASM({
-    Module['onExit'] = function(status) { out('exiting now, status ' + status) };
+    Module.onExit = (status) => out('exiting now, status ' + status);
   });
   return 14;
 }
@@ -6454,7 +6431,7 @@ double hello4(double x) {
 }
 ''')
     create_file('pre.js', r'''
-Module['preRun'] = function () {
+Module.preRun = () => {
   ENV['LD_LIBRARY_PATH']='/lib:/usr/lib:/usr/local/lib';
 };
 ''')
@@ -6747,8 +6724,8 @@ int main(int argc, char** argv) {
     create_file('lib.js', '''
       mergeInto(LibraryManager.library, {
        foo__sig: 'ii',
-       foo: function(f) { return f + 10; },
-       bar: function(f) { return f + 10; },
+       foo: (f) => f + 10,
+       bar: (f) => f + 10,
       });
       ''')
     create_file('main.c', r'''
@@ -7002,9 +6979,7 @@ int main() {
 mergeInto(LibraryManager.library, {
   my_js__deps: ['main', 'nonexistingvariable'],
   my_js: (function() {
-      return function() {
-        console.log("hello " + _nonexistingvariable);
-      };
+      return () => console.log("hello " + _nonexistingvariable);
   }()),
 });
 ''')
@@ -7021,7 +6996,7 @@ mergeInto(LibraryManager.library, {
     create_file('lib.js', r'''
 mergeInto(LibraryManager.library, {
   depper__deps: ['memset'],
-  depper: function(ptr) {
+  depper: (ptr) => {
     _memset(ptr, 'd'.charCodeAt(0), 10);
   },
 });
@@ -7460,7 +7435,7 @@ int main() {
   def test_eval_ctors_debug_output(self):
     create_file('lib.js', r'''
 mergeInto(LibraryManager.library, {
-external_thing: function() {}
+  external_thing: () => {}
 });
 ''')
     create_file('src.cpp', r'''
@@ -7703,7 +7678,7 @@ int main() {
   def test_binaryen_warn_mem(self):
     # if user changes INITIAL_MEMORY at runtime, the wasm module may not accept the memory import if
     # it is too big/small
-    create_file('pre.js', 'var Module = { INITIAL_MEMORY: 50 * 1024 * 1024 };\n')
+    create_file('pre.js', 'Module.INITIAL_MEMORY = 50 * 1024 * 1024')
     self.run_process([EMXX, test_file('hello_world.cpp'), '-sINITIAL_MEMORY=' + str(16 * 1024 * 1024), '--pre-js', 'pre.js', '-sWASM_ASYNC_COMPILATION=0', '-sIMPORTED_MEMORY'])
     out = self.run_js('a.out.js', assert_returncode=NON_ZERO)
     self.assertContained('LinkError', out)
@@ -9034,13 +9009,7 @@ end
     self.do_run_in_out_file_test(test_file('other/test_extern_weak.c'), out_suffix='.resolved', emcc_args=['-sMAIN_MODULE=2', 'libside.wasm'])
 
   def test_main_module_without_main(self):
-    create_file('pre.js', r'''
-var Module = {
-  onRuntimeInitialized: function() {
-    Module._foo();
-  }
-};
-''')
+    create_file('pre.js', 'Module.onRuntimeInitialized = () => Module._foo();')
     create_file('src.c', r'''
 #include <emscripten.h>
 EMSCRIPTEN_KEEPALIVE void foo() {
@@ -10649,9 +10618,7 @@ int main(void) {
     self.assertLess(abs(changed - 4491), 150)
 
   def test_INCOMING_MODULE_JS_API_missing(self):
-    create_file('pre.js', '''
-    Module['onRuntimeInitialized'] = () => console.log('initialized')
-    ''')
+    create_file('pre.js', 'Module.onRuntimeInitialized = () => console.log("initialized");')
     self.emcc_args += ['--pre-js=pre.js']
     self.do_runf(test_file('hello_world.c'), 'initialized')
 
@@ -10810,11 +10777,7 @@ int main(void) {
     self.do_runf('src.c', 'Module.read has been replaced with plain read', emcc_args=['-sASSERTIONS'])
 
   def test_assertions_on_incoming_module_api_changes(self):
-    create_file('pre.js', r'''
-      var Module = {
-        read: function() {}
-      }
-    ''')
+    create_file('pre.js', 'Module.read = () => {};')
     self.do_runf(test_file('hello_world.c'), 'Module.read option was removed',
                  emcc_args=['-sASSERTIONS', '--pre-js', 'pre.js'],
                  assert_returncode=NON_ZERO)
@@ -11649,7 +11612,7 @@ exec "$@"
     create_file('lib1.js', 'for (var i = 0; i < 100; i++) {}')
     create_file('lib2.js', '''
       mergeInto(LibraryManager.library, {
-       foo: function() { }
+        foo: () => {}
       });
       ''')
     self.run_process([EMCC, test_file('hello_world.c'),
@@ -11678,7 +11641,7 @@ exec "$@"
   def test_jslib_mangling(self):
     create_file('lib.js', '''
       mergeInto(LibraryManager.library, {
-       $__foo: function() { return 43; },
+        $__foo: () => 43,
       });
       ''')
     self.run_process([EMCC, test_file('hello_world.c'), '--js-library=lib.js', '-sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE=$__foo'])
@@ -12496,10 +12459,10 @@ const process = require('process');
 const cmd = 'find /proc/' + process.pid + '/fd -lname "{self.get_dir()}*" -printf "%l\\\\n" || true';
 let openFilesPre;
 
-Module['preRun'] = function() {{
+Module.preRun = () => {{
   openFilesPre = execSync(cmd, {{ stdio: ['ignore', 'pipe', 'ignore'] }}).toString();
 }}
-Module['postRun'] = function() {{
+Module.postRun = () => {{
   const openFilesPost = execSync(cmd, {{ stdio: ['ignore', 'pipe', 'ignore'] }}).toString();
   assert(openFilesPre == openFilesPost, 'File descriptors should not leak. \\n' +
     'Pre: \\n' + openFilesPre +
@@ -12769,9 +12732,8 @@ int main() {
 
   def test_fetch_settings(self):
     create_file('pre.js', '''
-    Module = {
-     fetchSettings: { cache: 'no-store' }
-    }''')
+    Module.fetchSettings = { cache: 'no-store' };
+    ''')
     self.emcc_args += ['--pre-js=pre.js']
     self.do_runf(test_file('hello_world.c'), '`Module.fetchSettings` was supplied but `fetchSettings` not included in INCOMING_MODULE_JS_API', assert_returncode=NON_ZERO)
 
@@ -13238,9 +13200,7 @@ w:0,t:0x[0-9a-fA-F]+: formatted: 42
     ''')
     create_file('lib.js', '''
       mergeInto(LibraryManager.library, {
-        foo: function() {
-          return {{{ Runtime.POINTER_SIZE }}};
-        }
+        foo: () => {{{ Runtime.POINTER_SIZE }}}
       });
     ''')
     self.set_setting('DEFAULT_LIBRARY_FUNCS_TO_INCLUDE', 'foo')
