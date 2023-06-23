@@ -178,7 +178,9 @@ var LibraryDylink = {
       '__wasm_call_ctors',
       '__start_em_asm',
       '__stop_em_asm',
-    ].includes(symName)
+      '__start_em_js',
+      '__stop_em_js',
+    ].includes(symName) || symName.startsWith('__em_js__')
 #if SPLIT_MODULE
         // Exports synthesized by wasm-split should be prefixed with '%'
         || symName[0] == '%'
@@ -777,6 +779,29 @@ var LibraryDylink = {
             var jsString = UTF8ToString(start);
             addEmAsm(start, jsString);
             start = HEAPU8.indexOf(0, start) + 1;
+          }
+        }
+
+        function addEmJs(name, sig, body) {
+          sig = sig.slice(1, -1).split(',');
+          var args = [];
+          for (var i in sig) {
+            args.push(sig[i].split(' ').pop());
+          }
+          var func = `(${args}) => ${body};`;
+#if DYLINK_DEBUG
+          dbg(`adding new EM_JS function: ${name} = ${func}`);
+#endif
+          {{{ makeEval('wasmImports[name] = eval(func)') }}};
+        }
+
+        for (var name in moduleExports) {
+          if (name.startsWith('__em_js__')) {
+            var start = moduleExports[name]
+            {{{ from64('start') }}}
+            var jsString = UTF8ToString(start);
+            var parts = jsString.split('<::>');
+            addEmJs(name.replace('__em_js__', ''), parts[0], parts[1]);
           }
         }
 #endif

@@ -831,6 +831,7 @@ def process_dynamic_libs(dylibs, lib_dirs):
   for dylib in dylibs:
     exports = webassembly.get_exports(dylib)
     exports = set(e.name for e in exports)
+    exports = [utils.removeprefix(e, '__em_js__') for e in exports]
     settings.SIDE_MODULE_EXPORTS.extend(sorted(exports))
 
     imports = webassembly.get_imports(dylib)
