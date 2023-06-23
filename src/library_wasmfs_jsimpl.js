@@ -24,16 +24,14 @@ mergeInto(LibraryManager.library, {
     return wasmFS$backends[backend].freeFile(file);
   },
 
-  _wasmfs_jsimpl_write: function(backend, file, buffer, length, {{{ defineI64Param('offset') }}}) {
-    {{{ receiveI64ParamAsDouble('offset') }}}
+  _wasmfs_jsimpl_write: function(backend, file, buffer, length, offset) {
 #if ASSERTIONS
     assert(wasmFS$backends[backend]);
 #endif
     return wasmFS$backends[backend].write(file, buffer, length, offset);
   },
 
-  _wasmfs_jsimpl_read: function(backend, file, buffer, length, {{{ defineI64Param('offset') }}}) {
-    {{{ receiveI64ParamAsDouble('offset') }}}
+  _wasmfs_jsimpl_read: function(backend, file, buffer, length, offset) {
 #if ASSERTIONS
     assert(wasmFS$backends[backend]);
 #endif
@@ -71,8 +69,7 @@ mergeInto(LibraryManager.library, {
   },
 
   _wasmfs_jsimpl_async_write__deps: ['emscripten_proxy_finish'],
-  _wasmfs_jsimpl_async_write: async function(ctx, backend, file, buffer, length, {{{ defineI64Param('offset') }}}, result_p) {
-    {{{ receiveI64ParamAsDouble('offset') }}}
+  _wasmfs_jsimpl_async_write: async function(ctx, backend, file, buffer, length, offset, result_p) {
 #if ASSERTIONS
     assert(wasmFS$backends[backend]);
 #endif
@@ -82,8 +79,7 @@ mergeInto(LibraryManager.library, {
   },
 
   _wasmfs_jsimpl_async_read__deps: ['emscripten_proxy_finish'],
-  _wasmfs_jsimpl_async_read: async function(ctx, backend, file, buffer, length, {{{ defineI64Param('offset') }}}, result_p) {
-    {{{ receiveI64ParamAsDouble('offset') }}}
+  _wasmfs_jsimpl_async_read: async function(ctx, backend, file, buffer, length, offset, result_p) {
 #if ASSERTIONS
     assert(wasmFS$backends[backend]);
 #endif

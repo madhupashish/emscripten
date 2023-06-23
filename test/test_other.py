@@ -13193,7 +13193,7 @@ foo/version.txt
     self.do_other_test('test_itimer.c')
 
   def test_itimer_standlone(self):
-    self.emcc_args += ['-sSTANDALONE_WASM']
+    self.emcc_args += ['-sSTANDALONE_WASM', '-sWASM_BIGINT']
     self.do_other_test('test_itimer_standalone.c')
     for engine in config.WASM_ENGINES:
       print('wasm engine', engine)

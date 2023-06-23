@@ -207,6 +207,10 @@ function makeInlineCalculation(expression, value, tempVar) {
   return '(' + expression.replace(/VALUE/g, value) + ')';
 }
 
+function splitI53(value) {
+  return [`(${value} >>> 0)`, `${value} / 4294967296`];
+}
+
 // XXX Make all i64 parts signed
 
 // Splits a number (an integer in a double, possibly > 32 bits) into an i64
@@ -864,30 +868,21 @@ function hasExportedSymbol(sym) {
   return WASM_EXPORTS.has(sym);
 }
 
-// JS API I64 param handling: if we have BigInt support, the ABI is simple,
-// it is a BigInt. Otherwise, we legalize into pairs of i32s.
-function defineI64Param(name) {
+function declareI64Param(name) {
   if (WASM_BIGINT) {
     return name;
   }
   return `${name}_low, ${name}_high`;
 }
 
-function receiveI64ParamAsI53(name, onError) {
+function i64ParamToI53(name, onError) {
   if (WASM_BIGINT) {
     // Just convert the bigint into a double.
-    return `${name} = bigintToI53Checked(${name}); if (isNaN(${name})) return ${onError};`;
+    return `${name} = bigintToI53Checked(${name});`;
   }
   // Convert the high/low pair to a Number, checking for
   // overflow of the I53 range and returning onError in that case.
-  return `var ${name} = convertI32PairToI53Checked(${name}_low, ${name}_high); if (isNaN(${name})) return ${onError};`;
-}
-
-function receiveI64ParamAsI53Unchecked(name) {
-  if (WASM_BIGINT) {
-    return `${name} = Number(${name});`;
-  }
-  return `var ${name} = convertI32PairToI53(${name}_low, ${name}_high);`;
+  return `var ${name} = convertI32PairToI53Checked(${name}_low, ${name}_high);`;
 }
 
 // Any function called from wasm64 may have bigint args, this function takes

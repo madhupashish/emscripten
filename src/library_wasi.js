@@ -160,7 +160,7 @@ var WasiLibrary = {
   // either wait for BigInt support or to legalize on the client.
   clock_time_get__nothrow: true,
   clock_time_get__deps: ['emscripten_get_now', '$nowIsMonotonic', '$checkWasiClock'],
-  clock_time_get: (clk_id, {{{ defineI64Param('ignored_precision') }}}, ptime) => {
+  clock_time_get: (clk_id, ignored_precision, ptime) => {
     if (!checkWasiClock(clk_id)) {
       return {{{ cDefs.EINVAL }}};
     }
@@ -294,14 +294,11 @@ var WasiLibrary = {
     return 0;
   },
 
-  fd_pwrite__deps: [
 #if SYSCALLS_REQUIRE_FILESYSTEM
-    '$doWritev',
+  fd_pwrite__deps: ['$doWritev'],
 #endif
-  ].concat(i53ConversionDeps),
-  fd_pwrite: (fd, iov, iovcnt, {{{ defineI64Param('offset') }}}, pnum) => {
+  fd_pwrite: (fd, iov, iovcnt, offset, pnum) => {
 #if SYSCALLS_REQUIRE_FILESYSTEM
-    {{{ receiveI64ParamAsI53('offset', cDefs.EOVERFLOW) }}}
     var stream = SYSCALLS.getStreamFromFD(fd)
     var num = doWritev(stream, iov, iovcnt, offset);
     {{{ makeSetValue('pnum', 0, 'num', SIZE_TYPE) }}};
@@ -348,14 +345,11 @@ var WasiLibrary = {
 #endif // SYSCALLS_REQUIRE_FILESYSTEM
   },
 
-  fd_pread__deps: [
 #if SYSCALLS_REQUIRE_FILESYSTEM
-    '$doReadv',
+  fd_pread__deps: ['$doReadv'],
 #endif
-  ].concat(i53ConversionDeps),
-  fd_pread: (fd, iov, iovcnt, {{{ defineI64Param('offset') }}}, pnum) => {
+  fd_pread: (fd, iov, iovcnt, offset, pnum) => {
 #if SYSCALLS_REQUIRE_FILESYSTEM
-    {{{ receiveI64ParamAsI53('offset', cDefs.EOVERFLOW) }}}
     var stream = SYSCALLS.getStreamFromFD(fd)
     var num = doReadv(stream, iov, iovcnt, offset);
     {{{ makeSetValue('pnum', 0, 'num', SIZE_TYPE) }}};
@@ -367,10 +361,8 @@ var WasiLibrary = {
 #endif
   },
 
-  fd_seek__deps: i53ConversionDeps,
-  fd_seek: (fd, {{{ defineI64Param('offset') }}}, whence, newOffset) => {
+  fd_seek: (fd, offset, whence, newOffset) => {
 #if SYSCALLS_REQUIRE_FILESYSTEM
-    {{{ receiveI64ParamAsI53('offset', cDefs.EOVERFLOW) }}}
     var stream = SYSCALLS.getStreamFromFD(fd);
     FS.llseek(stream, offset, whence);
     {{{ makeSetValue('newOffset', '0', 'stream.position', 'i64') }}};

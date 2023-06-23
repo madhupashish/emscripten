@@ -411,10 +411,7 @@ mergeInto(LibraryManager.library, {
   },
 
   _wasmfs_opfs_set_size_access__deps: ['$wasmfsOPFSAccessHandles', '$wasmfsOPFSProxyFinish'],
-  _wasmfs_opfs_set_size_access: async function(ctx, accessID,
-                                               {{{ defineI64Param('size') }}},
-                                               errPtr) {
-    {{{ receiveI64ParamAsDouble('size') }}};
+  _wasmfs_opfs_set_size_access: async function(ctx, accessID, size, errPtr) {
     let accessHandle = wasmfsOPFSAccessHandles.get(accessID);
     try {
       await accessHandle.truncate(size);
@@ -426,10 +423,7 @@ mergeInto(LibraryManager.library, {
   },
 
   _wasmfs_opfs_set_size_file__deps: ['$wasmfsOPFSFileHandles', '$wasmfsOPFSProxyFinish'],
-  _wasmfs_opfs_set_size_file: async function(ctx, fileID,
-                                             {{{ defineI64Param('size') }}},
-                                             errPtr) {
-    {{{ receiveI64ParamAsDouble('size') }}};
+  _wasmfs_opfs_set_size_file: async function(ctx, fileID, size, errPtr) {
     let fileHandle = wasmfsOPFSFileHandles.get(fileID);
     try {
       let writable = await fileHandle.createWritable({keepExistingData: true});

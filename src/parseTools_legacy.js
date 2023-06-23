@@ -113,3 +113,17 @@ function addAtMain(code) {
   assert(HAS_MAIN, 'addAtMain called but program has no main function');
   ATMAINS.push(code);
 }
+
+function receiveI64ParamAsI53(name, onError) {
+  if (WASM_BIGINT) {
+    // Just convert the bigint into a double.
+    return `${name} = bigintToI53Checked(${name}); if (isNaN(${name})) return ${onError};`;
+  }
+  // Convert the high/low pair to a Number, checking for
+  // overflow of the I53 range and returning onError in that case.
+  return `var ${name} = convertI32PairToI53Checked(${name}_low, ${name}_high); if (isNaN(${name})) return ${onError};`;
+}
+
+function defineI64Param(name) {
+  return declareI64Param(name);
+}

@@ -578,6 +578,12 @@ var LibraryEmbind = {
   },
 
 #if WASM_BIGINT
+  // This function is unique in that is designed to receive actual bigint
+  // values.  In this case `minRange` and `maxRange` are expected to be bigint
+  // values. e.g. MAX_INT64.  By marking this functions with the `__bigint`
+  // attribute we are telling the jsifier not to automaticlly convert parameters
+  // and return values from i64 to i53.
+  _embind_register_bigint__bigint: true,
   _embind_register_bigint__deps: [
     '$embindRepr', '$readLatin1String', '$registerType', '$integerReadValueFromPointer'],
   _embind_register_bigint: function(primitiveType, name, size, minRange, maxRange) {

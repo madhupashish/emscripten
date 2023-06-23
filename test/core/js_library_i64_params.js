@@ -1,4 +1,5 @@
 TestLibrary = {
+  jscall__bigint: true,
   jscall__deps: i53ConversionDeps,
   jscall__sig: 'jj',
   jscall: function({{{ defineI64Param('foo') }}}) {

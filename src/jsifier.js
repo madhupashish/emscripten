@@ -108,15 +108,22 @@ function runJSify() {
     }
   }
 
-  function convertPointerParams(symbol, snippet, sig) {
-    // Automatically convert any incoming pointer arguments from BigInt
-    // to double (this limits the range to int53).
-    // And convert the return value if the function returns a pointer.
-    return modifyJSFunction(snippet, (args, body) => {
+  function handleI64Signatures(symbol, snippet, sig) {
+    // Handler i64 paramaters and return values.
+    //
+    // When WASM_BIGINT is enabled these arrive as BigInt values which we
+    // convert to int53 JS numbers.  If necessary, we also convert the return
+    // value back into a BigInt.
+    //
+    // When WASM_BIGINT is not enabled we receive i64 values as a pair of i32
+    // numbers which is coverted to single int53 number.  In necessary, we also
+    // split the return value into a pair of i32 numbers.
+    return modifyJSFunction(snippet, (args, body, async_) => {
       let argLines = args.split('\n');
       argLines = argLines.map((line) => line.split('//')[0]);
       const argNames = argLines.join(' ').split(',').map((name) => name.trim());
-      let newArgs = [];
+      const newArgs = [];
+      let innerArgs = [];
       let argConvertions = '';
       for (let i = 1; i < sig.length; i++) {
         const name = argNames[i - 1];
@@ -124,30 +131,40 @@ function runJSify() {
           error(`convertPointerParams: missing name for argument ${i} in ${symbol}`);
           return snippet;
         }
-        if (sig[i] == 'p') {
-          argConvertions += `  ${name} = Number(${name});\n`;
-          newArgs.push(`Number(${name})`);
+        if (WASM_BIGINT) {
+          if (sig[i] == 'p' || sig[i] == 'j') {
+            argConvertions += `  ${i64ParamToI53(name)}\n`;
+          }
         } else {
-          newArgs.push(name);
+          if (sig[i] == 'j') {
+            argConvertions += `  ${i64ParamToI53(name)}\n`;
+            newArgs.push(declareI64Param(name));
+          } else {
+            newArgs.push(name);
+          }
         }
       }
 
-      if (sig[0] == 'p') {
-        // For functions that return a pointer we need to convert
-        // the return value too, which means we need to wrap the
-        // body in an inner function.
-        newArgs = newArgs.join(',');
+      var origArgs = args;
+      if (!WASM_BIGINT) {
+        args = newArgs.join(',');
+      }
+
+      if (sig[0] == 'j' || (WASM_BIGINT && sig[0] == 'p')) {
+        // For functions that where we need to mutate the return value, we
+        // also need to wrap the body in an inner function.
         return `\
-function(${args}) {
-  var ret = ((${args}) => { ${body} })(${newArgs});
-  return BigInt(ret);
+${async_}function(${args}) {
+${argConvertions}
+  var ret = (() => { ${body} })();
+  return ${makeReturn64('ret')};
 }`;
       }
 
       // Otherwise no inner function is needed and we covert the arguments
       // before executing the function body.
       return `\
-function(${args}) {
+${async_}function(${args}) {
 ${argConvertions}
   ${body};
 }`;
@@ -168,7 +185,7 @@ ${argConvertions}
 
     // apply LIBRARY_DEBUG if relevant
     if (LIBRARY_DEBUG && !isJsOnlySymbol(symbol)) {
-      snippet = modifyJSFunction(snippet, (args, body) => `\
+      snippet = modifyJSFunction(snippet, (args, body, async) => `\
 function(${args}) {
   var ret = (function() { if (runtimeDebug) err("[library call:${mangled}: " + Array.prototype.slice.call(arguments).map(prettyPrint) + "]");
   ${body}
@@ -176,6 +193,14 @@ function(${args}) {
   if (runtimeDebug && typeof ret != "undefined") err("  [     return:" + prettyPrint(ret));
   return ret;
 }`);
+    }
+
+    const sig = LibraryManager.library[symbol + '__sig'];
+    if (!LibraryManager.library[symbol + '__bigint']) {
+      if (sig && (sig.includes('j') || (MEMORY64 && sig.includes('p')))) {
+        snippet = handleI64Signatures(symbol, snippet, sig, deps);
+        i53ConversionDeps.forEach((d) => deps.push(d))
+      }
     }
 
     if (SHARED_MEMORY) {
@@ -202,13 +227,6 @@ function(${args}) {
 }\n`);
         }
         proxiedFunctionTable.push(mangled);
-      }
-    }
-
-    if (MEMORY64) {
-      const sig = LibraryManager.library[symbol + '__sig'];
-      if (sig && sig.includes('p')) {
-        snippet = convertPointerParams(symbol, snippet, sig);
       }
     }
 
@@ -265,7 +283,11 @@ function(${args}) {
         return;
       }
 
-      const deps = LibraryManager.library[symbol + '__deps'] || [];
+      if (!(symbol + '__deps' in LibraryManager.library)) {
+        LibraryManager.library[symbol + '__deps'] = [];
+      }
+
+      deps = LibraryManager.library[symbol + '__deps'];
       let sig = LibraryManager.library[symbol + '__sig'];
       if (!WASM_BIGINT && sig && sig[0] == 'j') {
         // Without WASM_BIGINT functions that return i64 depend on setTempRet0
